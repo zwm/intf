@@ -23,8 +23,9 @@ module spi_master (
     input                           rx_adj_en,
     input       [3 :0]              rx_adj_clk,
     input       [2 :0]              ncs_dly,
+    input       [3 :0]              trx_dly,
     // spi pin
-    output                          ncs,
+    output reg                      ncs,
     output                          sck,
     output                          mosi,
     input                           miso,
@@ -36,9 +37,9 @@ module spi_master (
 localparam IDLE                 = 3'd0;
 localparam NCS_LOW              = 3'd1;
 localparam DATA_BYTE            = 3'd2;
-localparam TX_RX_DELAY          = 3'd2;
-localparam WAIT_BUF             = 3'd3;
-localparam NCS_HIGH             = 3'd4;
+localparam TX_RX_DELAY          = 3'd3;
+localparam WAIT_BUF             = 3'd4;
+localparam NCS_HIGH             = 3'd5;
 // const
 localparam SPI_TX               = 3'd0;
 localparam SPI_RX               = 3'd1;
@@ -46,9 +47,9 @@ localparam SPI_TRANS            = 3'd2;
 // signals
 reg [2:0] st_curr, st_next; reg [1:0] trans_state; reg [2:0] bit_cnt; reg [19:0] byte_cnt; reg [3:0] clk_cnt;
 wire [2:0] bit_cnt_max; wire [19:0] byte_cnt_max;
-wire bit_cnt_end, bit_end, byte_cnt_end, clk_cnt_end;
+wire bit_cnt_end, bit_end, byte_cnt_end, clk_cnt_end, trx_dly_end;
 wire buf_valid, ncs_dly_end, rx_data_en, tx_data_en, tx_edge, rx_edge;
-reg sck_raw; reg [7:0] tx_shift; reg [6:0] rx_shift;
+reg sck_raw, sck_shift; reg [7:0] tx_shift; reg [6:0] rx_shift;
 
 //---------------------------------------------------------------------------
 // Assignment
@@ -72,12 +73,14 @@ assign bit_cnt_end                  = (bit_cnt == bit_cnt_max);
 assign bit_end                      = tx_edge & bit_cnt_end;
 assign ncs_dly_end                  = bit_cnt_end;
 // byte cnt
-assign byte_cnt_max                 = trans_state == SPI_TX ? tx_len :
-                                      trans_state == SPI_RX ? rx_len : tx_len; // default, tx_len ???
+assign byte_cnt_max                 = st_curr == TX_RX_DELAY ? {trx_dly[3:0], 2'b11} :
+                                      trans_state == SPI_TX ? tx_len - 1 :
+                                      trans_state == SPI_RX ? rx_len - 1 : tx_len - 1; // default, tx_len ???
 assign byte_cnt_end                 = (byte_cnt == byte_cnt_max);
+assign trx_dly_end                  = byte_cnt_end;
 // buf
-assign tx_buf_req                   = (st_curr == DATA_BYTE) && (bit_cnt == 0) && tx_edge;
-assign rx_buf_req                   = (st_curr == DATA_BYTE) && bit_cnt_end && rx_edge;
+assign tx_buf_req                   = (trans_state == SPI_TX || trans_state == SPI_TRANS) && (st_curr == DATA_BYTE) && (~byte_cnt_end) && (bit_cnt == 0) && tx_edge;
+assign rx_buf_req                   = (trans_state == SPI_RX || trans_state == SPI_TRANS) && (st_curr == DATA_BYTE) && bit_cnt_end && rx_edge;
 assign rx_buf_byte                  = {rx_shift[6:0], miso};
 //---------------------------------------------------------------------------
 // Syn
@@ -133,24 +136,26 @@ always @(posedge clk or negedge rstn)
         byte_cnt <= 0;
     else if (~spi_en)
         byte_cnt <= 0;
-    else if (st_curr == IDLE && spi_start)
+    else if ((st_curr == IDLE && spi_start) || (st_curr != TX_RX_DELAY && st_next == TX_RX_DELAY))
         byte_cnt <= 0;
-    else if (st_curr == DATA_BYTE && bit_end) begin
+    else if ((st_curr == DATA_BYTE && bit_end) || (st_curr == TX_RX_DELAY)) begin
         if (byte_cnt_end)
             byte_cnt <= 0;
         else
             byte_cnt <= byte_cnt + 1;
     end
 // tx_shift, shift dir ???
-always @(posedge clk)
-    if (trans_state == SPI_TX || trans_state == SPI_TRANS) begin
+always @(posedge clk or negedge rstn)
+    if (~rstn)
+        tx_shift <= 0;
+    else if (trans_state == SPI_TX || trans_state == SPI_TRANS) begin
         if (st_curr != DATA_BYTE && st_next == DATA_BYTE) begin
             tx_shift <= tx_buf_byte;
         end
         else if (st_curr == DATA_BYTE && tx_edge) begin
             if (~bit_end)
                 tx_shift <= {tx_shift[6:0], 1'b0};
-            else if (~byte_end & buf_valid)
+            else if (~byte_cnt_end & buf_valid)
                 tx_shift <= tx_buf_byte;
         end
     end
@@ -159,7 +164,7 @@ always @(posedge clk)
     end
 // rx_shift, shift dir ???
 always @(posedge clk)
-    if (st_curr == DATA_BYTE) begin
+    if (st_curr == DATA_BYTE && rx_edge) begin
         rx_shift <= {rx_shift[5:0], miso};
     end
 // trans_state
@@ -222,7 +227,7 @@ always @(*) begin
             end
         end
         TX_RX_DELAY: begin // tx rx delay & check buffer
-            if (tx_rx_dly_end) begin
+            if (trx_dly_end) begin
                 if (buf_valid)
                     st_next = DATA_BYTE;
                 else
@@ -254,7 +259,7 @@ always @(posedge clk or negedge rstn)
     else if (st_curr == NCS_HIGH && ncs_dly_end)
         ncs <= 1;
 // output
-assign sck                      = cpha ? sck_shift : sck_raw;
+assign sck                      = cpha ? sck_raw : sck_shift;
 assign mosi                     = tx_shift[7];
 assign spi_status               = { 4'h0,                   // 7:4
                                     1'b0,                   // 3

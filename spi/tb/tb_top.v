@@ -19,6 +19,7 @@ reg                             cpol;
 reg                             rx_adj_en;
 reg         [3 :0]              rx_adj_clk;
 reg         [2 :0]              ncs_dly;
+reg         [3 :0]              trx_dly;
 wire                            miso;
 wire                            tx_buf_req;
 wire                            rx_buf_req;
@@ -28,7 +29,7 @@ wire                            sck;
 wire                            mosi;
 wire        [7:0]               spi_status;
 // global
-integer err_cnt, chk_cnt, case_num;
+integer err_cnt, cmp_cnt, case_num;
 reg [48*8-1:0] log_dir;
 
 // loopback
@@ -72,6 +73,7 @@ spi_master u_spi_master (
     .rx_adj_en                  ( rx_adj_en                     ),
     .rx_adj_clk                 ( rx_adj_clk                    ),
     .ncs_dly                    ( ncs_dly                       ),
+    .trx_dly                    ( trx_dly                       ),
     .ncs                        ( ncs                           ),
     .sck                        ( sck                           ),
     .mosi                       ( mosi                          ),
@@ -130,28 +132,98 @@ task sys_init;
         rx_adj_en               = 0;
         rx_adj_clk              = 0;
         ncs_dly                 = 0;
+        trx_dly                 = 0;
     end
 endtask
 
 task main_loop;
     integer fp, ret, i, j, k, tmp;
     begin
-        case1(0, 0);
-        case1(0, 1);
-        case1(1, 0);
-        case1(1, 1);
+        case1(0, 0, 4'h0, 0, 1, 0);
+//        case1(0, 1, 4'h0, 0, 1, 0);
+//        case1(1, 0, 4'h0, 0, 1, 0);
+//        case1(1, 1, 4'h0, 0, 1, 0);
+//        case1(0, 0, 4'h3, 0, 1, 0);
+//        case1(0, 1, 4'h3, 0, 1, 0);
+//        case1(1, 0, 4'h3, 0, 1, 0);
+//        case1(1, 1, 4'h3, 0, 1, 0);
+//
+//        case1(0, 0, 4'h0, 0, 19, 0);
+//        case1(0, 1, 4'h0, 0, 19, 0);
+//        case1(1, 0, 4'h0, 0, 19, 0);
+//        case1(1, 1, 4'h0, 0, 19, 0);
+//
+        case1(1, 0, 4'h0, 1,  1, 1);
+        case1(1, 0, 4'h0, 1, 19, 0);
+        case1(1, 0, 4'h0, 1,  0, 19);
+
     end
 endtask
 
 task case1;
     input cpha_i;
     input cpol_i;
+    input [3:0] clk_div_i;
+    input tx_rx_seq_i;
+    input [19:0] tx_len_i;
+    input [19:0] rx_len_i;
     begin
         // delay
         fork
             // driv
             begin
                 spi_en                  = 1;
+                cpha                    = cpha_i;
+                cpol                    = cpol_i;
+                clk_div                 = clk_div_i;
+                tx_len                  = tx_len_i;
+                rx_len                  = rx_len_i;
+                tx_rx_seq               = tx_rx_seq_i;
+                #100;
+                tx_buf_byte             = 0;
+                tx_buf_vld              = 0;
+                rx_buf_vld              = 0;
+                rx_adj_en               = 0;
+                rx_adj_clk              = 0;
+                ncs_dly                 = 0;
+                trx_dly                 = 0;
+                trig;
+            end
+            // tx buf
+            begin
+                @(posedge spi_start_pulse);
+                //repeat(10) @(posedge clk);
+                tx_buf_byte             = 8'ha5;
+                tx_buf_vld              = 1;
+            end
+            // rx buf
+            begin
+                @(posedge spi_start_pulse);
+                //repeat(20) @(posedge clk);
+                rx_buf_vld              = 1;
+            end
+            // finish
+            begin
+                @(posedge ncs);
+                #100;
+            end
+        join
+    end
+endtask
+
+task case2;
+    input cpha_i;
+    input cpol_i;
+    input [3:0] clk_div_i;
+    begin
+        // delay
+        fork
+            // driv
+            begin
+                spi_en                  = 1;
+                cpha                    = cpha_i;
+                cpol                    = cpol_i;
+                clk_div                 = clk_div_i;
                 #100;
                 tx_rx_seq               = 0;
                 tx_len                  = 1;
@@ -159,18 +231,17 @@ task case1;
                 tx_buf_byte             = 0;
                 tx_buf_vld              = 0;
                 rx_buf_vld              = 0;
-                clk_div                 = 0;
-                cpha                    = cpha_i;
-                cpol                    = cpol_i;
                 rx_adj_en               = 0;
                 rx_adj_clk              = 0;
-                ncs_dly                 = 2;
+                ncs_dly                 = 0;
+                trx_dly                 = 0;
+                trig;
             end
             // tx buf
             begin
                 @(posedge spi_start_pulse);
-                repeat(10) @(posedge clk);
-                tx_buf_byte             = 8'h55;
+                //repeat(10) @(posedge clk);
+                tx_buf_byte             = 8'ha5;
                 tx_buf_vld              = 1;
                 @(posedge tx_buf_req);
                 @(posedge clk);
@@ -179,7 +250,7 @@ task case1;
             // rx buf
             begin
                 @(posedge spi_start_pulse);
-                repeat(20) @(posedge clk);
+                //repeat(20) @(posedge clk);
                 rx_buf_vld              = 1;
                 @(posedge rx_buf_req);
                 @(posedge clk);
