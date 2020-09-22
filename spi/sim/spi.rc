@@ -2,7 +2,7 @@ Magic 271485
 Revision Verdi3_L-2016.06-1
 
 ; Window Layout <x> <y> <width> <height> <signalwidth> <valuewidth>
-viewPort 0 28 1920 372 233 65
+viewPort 0 28 1914 488 233 65
 
 ; File list:
 ; openDirFile [-d delimiter] [-s time_offset] [-rf auto_bus_rule_file] path_name file_name
@@ -16,16 +16,16 @@ signalSpacing 5
 
 ; windowTimeUnit is used for zoom, cursor & marker
 ; waveform viewport range
-zoom 0.000000 83426.833858
-cursor 0.000000
+zoom 112580.011678 115371.500618
+cursor 420500.000000
 marker 0.000000
 
 ; user define markers
 ; userMarker time_pos marker_name color linestyle
 ; visible top row signal index
-top 0
+top 11
 ; marker line index
-markerPos 3
+markerPos 26
 
 ; event list
 ; addEvent event_name event_expression
@@ -45,12 +45,45 @@ COMPLEX_EVENT_END
 curSTATUS ByChange
 
 
+aliasmapname spi_master.st_curr
+nalias DATA_BYTE		3'b010		NULL
+nalias TX_RX_DELAY		3'b011		NULL
+nalias IDLE		3'b000		NULL
+nalias NCS_LOW		3'b001		NULL
+nalias WAIT_BUF		3'b100		NULL
+nalias NCS_HIGH		3'b101		NULL
+
 addGroup "G1"
 activeDirFile "" "/home/xiaotu/github/intf/spi/sim/tb_top.fsdb"
 addSignal -h 15 /tb_top/u_spi_master/rstn
 addSignal -h 15 -holdScope clk
-addSignal -h 15 -UNSIGNED -HEX -holdScope st_curr[2:0]
+addSignal -h 15 -holdScope tx_rx_seq
 addGroup "G2"
+aliasname spi_master.st_curr
+addSignal -h 15 -UNSIGNED -HEX /tb_top/u_spi_master/st_curr[2:0]
+addSignal -h 15 -holdScope spi_start_pulse
+addSignal -h 15 -UNSIGNED -HEX -holdScope trans_state[1:0]
+addGroup "G3"
+addSignal -h 15 /tb_top/u_spi_master/cpha
+addSignal -h 15 -holdScope cpol
+addGroup "G4"
+addSignal -h 15 /tb_top/u_spi_master/ncs
+addSignal -h 15 -holdScope sck
+addSignal -h 15 -holdScope mosi
+addSignal -h 15 -holdScope miso
+addGroup "G5"
+addSignal -h 15 -UNSIGNED -HEX /tb_top/u_spi_master/bit_cnt[2:0]
+addSignal -h 15 -UNSIGNED -UDEC -holdScope byte_cnt[19:0]
+addSignal -h 15 -holdScope tx_edge
+addSignal -h 15 -holdScope rx_edge
+addGroup "G6"
+addSignal -h 15 /tb_top/u_spi_master/tx_buf_req
+addSignal -h 15 -holdScope tx_buf_vld
+addSignal -h 15 -holdScope rx_buf_req
+addSignal -h 15 -holdScope rx_buf_vld
+addSignal -h 15 -UNSIGNED -HEX -holdScope rx_buf_byte[7:0]
+addSignal -h 15 /tb_top/sim_end
+addGroup "G7"
 
 ; getSignalForm Scope Hierarchy Status
 ; active file of getSignalForm

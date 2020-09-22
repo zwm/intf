@@ -31,6 +31,7 @@ wire        [7:0]               spi_status;
 // global
 integer err_cnt, cmp_cnt, case_num;
 reg [48*8-1:0] log_dir;
+reg sim_end;
 
 // loopback
 assign miso = mosi;
@@ -118,6 +119,7 @@ task sys_init;
         case_num                = 0;
         cmp_cnt                 = 0;
         err_cnt                 = 0;
+        sim_end                 = 0;
         tx_buf_vld              = 0;
         tx_buf_byte             = 0;
         rx_buf_vld              = 0;
@@ -140,19 +142,19 @@ task main_loop;
     integer fp, ret, i, j, k, tmp;
     begin
         case1(0, 0, 4'h0, 0, 1, 0);
-//        case1(0, 1, 4'h0, 0, 1, 0);
-//        case1(1, 0, 4'h0, 0, 1, 0);
-//        case1(1, 1, 4'h0, 0, 1, 0);
-//        case1(0, 0, 4'h3, 0, 1, 0);
-//        case1(0, 1, 4'h3, 0, 1, 0);
-//        case1(1, 0, 4'h3, 0, 1, 0);
-//        case1(1, 1, 4'h3, 0, 1, 0);
-//
-//        case1(0, 0, 4'h0, 0, 19, 0);
-//        case1(0, 1, 4'h0, 0, 19, 0);
-//        case1(1, 0, 4'h0, 0, 19, 0);
-//        case1(1, 1, 4'h0, 0, 19, 0);
-//
+        case1(0, 1, 4'h0, 0, 1, 0);
+        case1(1, 0, 4'h0, 0, 1, 0);
+        case1(1, 1, 4'h0, 0, 1, 0);
+        case1(0, 0, 4'h3, 0, 1, 0);
+        case1(0, 1, 4'h3, 0, 1, 0);
+        case1(1, 0, 4'h3, 0, 1, 0);
+        case1(1, 1, 4'h3, 0, 1, 0);
+
+        case1(0, 0, 4'h0, 0, 19, 0);
+        case1(0, 1, 4'h0, 0, 19, 0);
+        case1(1, 0, 4'h0, 0, 19, 0);
+        case1(1, 1, 4'h0, 0, 19, 0);
+
         case1(1, 0, 4'h0, 1,  1, 1);
         case1(1, 0, 4'h0, 1, 19, 0);
         case1(1, 0, 4'h0, 1,  0, 19);
@@ -167,11 +169,13 @@ task case1;
     input tx_rx_seq_i;
     input [19:0] tx_len_i;
     input [19:0] rx_len_i;
+    integer i, j, k, l, m, n, t, r;
     begin
         // delay
         fork
             // driv
             begin
+                sim_end                 = 0;
                 spi_en                  = 1;
                 cpha                    = cpha_i;
                 cpol                    = cpol_i;
@@ -191,20 +195,53 @@ task case1;
             end
             // tx buf
             begin
-                @(posedge spi_start_pulse);
-                //repeat(10) @(posedge clk);
-                tx_buf_byte             = 8'ha5;
-                tx_buf_vld              = 1;
+                begin: LOOP_TX
+                    while(1) begin
+                        @(posedge clk);
+                        if (spi_start_pulse) begin
+                            tx_buf_byte             = 8'ha5;
+                            tx_buf_vld              = 1;
+                        end
+                        if (tx_buf_req) begin
+                            tx_buf_vld              = 0;
+                            t = {$random}%30;
+                            for(i = 0; i < t; i = i + 1) begin
+                                @(posedge clk);
+                            end
+                            tx_buf_vld              = 1;
+                        end
+                        if (sim_end) begin
+                            disable LOOP_TX;
+                        end
+                    end
+                end
             end
             // rx buf
             begin
-                @(posedge spi_start_pulse);
-                //repeat(20) @(posedge clk);
-                rx_buf_vld              = 1;
+                begin: LOOP_RX
+                    while(1) begin
+                        @(posedge clk);
+                        if (spi_start_pulse) begin
+                            rx_buf_vld              = 1;
+                        end
+                        if (rx_buf_req) begin
+                            rx_buf_vld              = 0;
+                            r = {$random}%30;
+                            for(j = 0; j < r; j = j + 1) begin
+                                @(posedge clk);
+                            end
+                            rx_buf_vld              = 1;
+                        end
+                        if (sim_end) begin
+                            disable LOOP_RX;
+                        end
+                    end
+                end
             end
             // finish
             begin
                 @(posedge ncs);
+                sim_end = 1;
                 #100;
             end
         join
